@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>反应速度测试</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        transition: background-color 0.2s ease;
+      }
+
+      html,
+      body {
+        padding: 0;
+        margin: 0;
+        font-family: 'Arial', sans-serif;
+      }
+
+      .container {
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
+
+      .board {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        cursor: pointer;
+        padding: 2rem;
+        text-align: center;
+        transition: background-color 0.3s ease;
+      }
+
+      .base {
+        background-color: #409eff;
+      }
+
+      .red {
+        background-color: #f56c6c;
+      }
+
+      .green {
+        background-color: #67c23a;
+      }
+
+      h1 {
+        font-size: clamp(2rem, 8vw, 5rem);
+        margin: 0 0 1rem 0;
+      }
+
+      p {
+        font-size: clamp(1rem, 3vw, 1.5rem);
+        margin: 0;
+        opacity: 0.9;
+      }
+
+      .stats {
+        position: fixed;
+        bottom: 2rem;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: center;
+        gap: 2rem;
+        color: #333;
+        font-size: 1rem;
+      }
+
+      .stat-item {
+        background: rgba(255, 255, 255, 0.8);
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        backdrop-filter: blur(5px);
+      }
+
+      @media (prefers-reduced-motion) {
+        * {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <div id="board" class="board base">
+        <h1>点击开始</h1>
+        <p>当颜色变绿时，立即点击屏幕</p>
+      </div>
+
+      <div class="stats">
+        <div class="stat-item">
+          最快: <span id="best-time">--</span> ms
+        </div>
+        <div class="stat-item">
+          平均: <span id="avg-time">--</span> ms
+        </div>
+        <div class="stat-item">
+          次数: <span id="attempts">0</span>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      // 使用对象组织状态
+      const gameState = {
+        timer: null,
+        isActive: false,
+        startTime: 0,
+        currentDelay: 0,
+        randomDelay: 0,
+        results: [],
+        bestTime: Infinity,
+        attempts: 0,
+      }
+
+      // DOM 元素
+      const elements = {
+        board: document.querySelector('#board'),
+        title: document.querySelector('h1'),
+        subtitle: document.querySelector('p'),
+        bestTime: document.getElementById('best-time'),
+        avgTime: document.getElementById('avg-time'),
+        attempts: document.getElementById('attempts'),
+      }
+
+      // 工具函数
+      const utils = {
+        // 获取随机延迟时间（秒）
+        getRandomDelay(min = 3, max = 7) {
+          return (
+            Math.floor(Math.random() * (max - min + 1)) +
+            min
+          )
+        },
+
+        // 格式化时间显示
+        formatTime(ms) {
+          return ms.toFixed(3)
+        },
+
+        // 计算平均值
+        calculateAverage(arr) {
+          if (arr.length === 0) return 0
+          return (
+            arr.reduce((sum, val) => sum + val, 0) /
+            arr.length
+          )
+        },
+      }
+
+      // 游戏逻辑
+      const game = {
+        // 重置游戏状态
+        reset() {
+          if (gameState.timer) {
+            clearTimeout(gameState.timer)
+            gameState.timer = null
+          }
+
+          gameState.currentDelay = 0
+          gameState.randomDelay = 0
+          gameState.startTime = 0
+        },
+
+        // 更新统计信息
+        updateStats() {
+          elements.attempts.textContent = gameState.attempts
+
+          if (gameState.results.length > 0) {
+            elements.bestTime.textContent =
+              utils.formatTime(gameState.bestTime)
+            elements.avgTime.textContent = utils.formatTime(
+              utils.calculateAverage(gameState.results)
+            )
+          }
+        },
+
+        // 等待阶段
+        waitPhase() {
+          elements.board.classList.remove('base', 'green')
+          elements.board.classList.add('red')
+          elements.title.textContent = '等待颜色变绿'
+          elements.subtitle.textContent = '不要提前点击!'
+
+          gameState.randomDelay = utils.getRandomDelay()
+          gameState.currentDelay = 0
+
+          this.countdown()
+        },
+
+        // 倒计时
+        countdown() {
+          gameState.currentDelay++
+
+          if (
+            gameState.currentDelay >= gameState.randomDelay
+          ) {
+            this.reactionPhase()
+            return
+          }
+
+          gameState.timer = setTimeout(() => {
+            this.countdown()
+          }, 1000)
+        },
+
+        // 反应阶段
+        reactionPhase() {
+          this.reset()
+
+          elements.board.classList.remove('red')
+          elements.board.classList.add('green')
+          elements.title.textContent = '点击!'
+          elements.subtitle.textContent = '越快越好!'
+
+          gameState.startTime = performance.now()
+        },
+
+        // 记录结果
+        recordResult() {
+          if (!gameState.startTime) return
+
+          const endTime = performance.now()
+          const reactionTime = endTime - gameState.startTime
+
+          // 记录结果
+          gameState.results.push(reactionTime)
+          gameState.attempts++
+
+          // 更新最佳时间
+          if (reactionTime < gameState.bestTime) {
+            gameState.bestTime = reactionTime
+          }
+
+          // 显示结果
+          elements.board.classList.remove('green', 'red')
+          elements.board.classList.add('base')
+          elements.title.textContent = `${utils.formatTime(
+            reactionTime
+          )} ms`
+          elements.subtitle.textContent = '点击继续测试'
+
+          // 更新统计
+          this.updateStats()
+
+          gameState.isActive = false
+        },
+
+        // 提前点击
+        falseStart() {
+          this.reset()
+
+          elements.board.classList.remove('red')
+          elements.board.classList.add('base')
+          elements.title.textContent = '提前点击了!'
+          elements.subtitle.textContent = '点击重新开始'
+
+          gameState.isActive = false
+        },
+
+        // 开始游戏
+        start() {
+          if (gameState.isActive) {
+            // 如果已经在反应阶段，记录结果
+            if (gameState.startTime) {
+              this.recordResult()
+            }
+            // 如果在等待阶段，判定为提前点击
+            else if (
+              elements.board.classList.contains('red')
+            ) {
+              this.falseStart()
+            }
+          } else {
+            // 开始新的测试
+            gameState.isActive = true
+            this.waitPhase()
+          }
+        },
+      }
+
+      // 事件监听
+      elements.board.addEventListener('click', () => {
+        game.start()
+      })
+
+      // 支持键盘操作
+      document.addEventListener('keydown', (e) => {
+        // 空格键或回车键
+        if (e.code === 'Space' || e.code === 'Enter') {
+          e.preventDefault()
+          game.start()
+        }
+      })
+
+      // 触摸设备支持
+      elements.board.addEventListener(
+        'touchstart',
+        (e) => {
+          e.preventDefault()
+          game.start()
+        },
+        { passive: false }
+      )
+    </script>
+  </body>
+</html>
